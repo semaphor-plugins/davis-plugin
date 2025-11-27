@@ -16,7 +16,7 @@ export const config: ComponentsConfig = {
       },
     },
     {
-      name: 'Month-over-Month Table',
+      name: 'V2-Month-over-Month Table',
       component: 'MonthOverMonthTable',
       componentType: 'chart',
       chartType: 'table',
@@ -29,7 +29,13 @@ export const config: ComponentsConfig = {
         },
         subtitle: {
           title: 'Subtitle',
-          defaultValue: 'Davis Insight weighted index changes by region for selected commodities',
+          defaultValue:
+            'Davis Insight weighted index changes by region for selected commodities',
+          ui: 'input',
+        },
+        dateFilterName: {
+          title: 'Date Filter Field Name',
+          defaultValue: 'public.sales_data.order_date',
           ui: 'input',
         },
       },
@@ -48,7 +54,8 @@ export const config: ComponentsConfig = {
         },
         subtitle: {
           title: 'Subtitle',
-          defaultValue: 'Davis Insight regional spreads for #1 Busheling as of February 2025',
+          defaultValue:
+            'Davis Insight regional spreads for #1 Busheling as of February 2025',
           ui: 'input',
         },
       },

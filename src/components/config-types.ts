@@ -23,10 +23,35 @@ export type CustomCardTheme = {
   mode?: 'light' | 'dark' | 'system';
 };
 
+export type Operation =
+  | '='
+  | '>'
+  | '<'
+  | '>='
+  | '<='
+  | '!='
+  | 'in'
+  | 'not in'
+  | 'like'
+  | 'not like'
+  | 'between'
+  | 'not between'
+  | 'is null'
+  | 'is not null';
+
+export type FilterValue = {
+  filterId: string;
+  name: string;
+  valueType: 'string' | 'number' | 'date' | 'boolean';
+  operation: Operation;
+  values: (string | number | boolean)[];
+};
+
 export type SingleInputVisualProps = {
   data: Data;
   settings?: Record<string, string | number | boolean>;
   theme?: CustomCardTheme;
+  filterValues?: FilterValue[];
 };
 
 export type MultiInputVisualProps = {

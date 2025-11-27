@@ -16,21 +16,81 @@ import { Label } from '../ui/label';
 import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
 import { SingleInputVisualProps } from '../config-types';
 
-// Months in descending order (most recent first)
-const allMonths = [
-  'Dec',
-  'Nov',
-  'Oct',
-  'Sep',
-  'Aug',
-  'Jul',
-  'Jun',
-  'May',
-  'Apr',
-  'Mar',
-  'Feb',
-  'Jan',
-];
+// Month name mapping for parsing and display
+const MONTH_NAMES = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+const MONTH_DISPLAY: Record<string, string> = {
+  jan: 'Jan', feb: 'Feb', mar: 'Mar', apr: 'Apr',
+  may: 'May', jun: 'Jun', jul: 'Jul', aug: 'Aug',
+  sep: 'Sep', oct: 'Oct', nov: 'Nov', dec: 'Dec',
+};
+
+// Type for detected month columns
+type MonthColumn = {
+  month: string; // lowercase: jan, feb, etc.
+  year: string; // e.g., "2024", "2025"
+  display: string; // e.g., "Jan"
+  fullKey: string; // e.g., "jan2024"
+};
+
+// Helper to detect month columns from data
+const detectMonthColumns = (data: Record<string, string | number | boolean>[]): MonthColumn[] => {
+  if (!data || data.length === 0) {
+    console.log('⚠️ No data provided to detectMonthColumns');
+    return [];
+  }
+
+  const firstRow = data[0];
+  const monthColumns: MonthColumn[] = [];
+  const seenKeys = new Set<string>();
+
+  // Pattern: {month}{year} where month is jan-dec and year is 4 digits
+  const monthPattern = /^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)(\d{4})$/;
+
+  console.log('🔑 All keys in first row:', Object.keys(firstRow));
+
+  for (const key of Object.keys(firstRow)) {
+    const match = key.match(monthPattern);
+    if (match) {
+      const [, month, year] = match;
+      const fullKey = `${month}${year}`;
+
+      // Only include this column if it has non-null data in at least one row
+      const hasData = data.some(row => row[fullKey] !== null && row[fullKey] !== undefined && row[fullKey] !== '');
+
+      console.log(`  📅 Found month column: ${fullKey}, hasData: ${hasData}`);
+
+      if (!seenKeys.has(fullKey) && hasData) {
+        seenKeys.add(fullKey);
+        monthColumns.push({
+          month,
+          year,
+          display: MONTH_DISPLAY[month],
+          fullKey,
+        });
+      }
+    }
+  }
+
+  console.log('📦 Month columns before sorting:', monthColumns);
+
+  // Sort by year (descending) then by month (descending within year)
+  monthColumns.sort((a, b) => {
+    const yearDiff = parseInt(b.year) - parseInt(a.year);
+    if (yearDiff !== 0) return yearDiff;
+
+    const aMonthIdx = MONTH_NAMES.indexOf(a.month);
+    const bMonthIdx = MONTH_NAMES.indexOf(b.month);
+    return bMonthIdx - aMonthIdx;
+  });
+
+  console.log('📦 Month columns after sorting:', monthColumns);
+
+  // Only return the first 12 months (most recent 12 months)
+  const result = monthColumns.slice(0, 12);
+  console.log('✨ Final month columns (limited to 12):', result);
+  return result;
+};
+
 const quarterMonths: Record<string, string[]> = {
   Q1: ['Mar', 'Feb', 'Jan'],
   Q2: ['Jun', 'May', 'Apr'],
@@ -42,18 +102,38 @@ export function MonthOverMonthTable({
   data,
   settings,
 }: SingleInputVisualProps) {
+  // Detect available month columns from data
+  const detectedMonths = React.useMemo(() => {
+    const detected = detectMonthColumns(data);
+    console.log('🔍 Detected months:', detected);
+    console.log('📊 Raw data sample (first row):', data[0]);
+    return detected;
+  }, [data]);
+
+  // Create allMonths array from detected columns (for compatibility)
+  const allMonths = React.useMemo(() => {
+    const displayNames = detectedMonths.map(m => m.display);
+    console.log('🎯 All months (display names):', displayNames);
+    return displayNames;
+  }, [detectedMonths]);
+
   const [expandedRows, setExpandedRows] = useState<Set<string>>(
     new Set(['North Central'])
   );
   const [showVolume, setShowVolume] = useState(false);
   const [showMyMills, setShowMyMills] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [selectedMonths, setSelectedMonths] = useState<string[]>([
-    'Feb',
-    'Jan',
-    'Dec',
-    'Nov',
-  ]);
+
+  // Initialize selectedMonths with empty array (will be populated by useEffect)
+  const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
+
+  // Update selectedMonths when detected months change
+  React.useEffect(() => {
+    const newSelectedMonths = detectedMonths.slice(0, 4).map(m => m.display);
+    console.log('✅ Setting selected months:', newSelectedMonths);
+    setSelectedMonths(newSelectedMonths);
+  }, [detectedMonths]);
+
   const [additionalColumn, setAdditionalColumn] = useState('YoY');
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
@@ -251,6 +331,11 @@ export function MonthOverMonthTable({
     return 0; // Region
   };
 
+  // Helper to get month column by display name
+  const getMonthColumn = (displayName: string): MonthColumn | undefined => {
+    return detectedMonths.find(m => m.display === displayName);
+  };
+
   const renderRow = (
     item: Record<string, string | number | boolean>,
     index: number
@@ -285,27 +370,9 @@ export function MonthOverMonthTable({
 
     if (!shouldShow) return null;
 
-    // Sort months to show in descending order (most recent first)
-    const monthOrder = [
-      'Dec',
-      'Nov',
-      'Oct',
-      'Sep',
-      'Aug',
-      'Jul',
-      'Jun',
-      'May',
-      'Apr',
-      'Mar',
-      'Feb',
-      'Jan',
-    ];
-    const monthsToShow =
-      additionalColumn === 'All months'
-        ? allMonths
-        : selectedMonths.sort(
-            (a, b) => monthOrder.indexOf(a) - monthOrder.indexOf(b)
-          );
+    // Use the same monthsToShow logic as the main component
+    // (defined outside this function in the component body)
+    // We'll access it from the closure
 
     return (
       <tr
@@ -353,14 +420,17 @@ export function MonthOverMonthTable({
         </td>
 
         {/* Render month columns */}
-        {monthsToShow.map((month) => {
-          // All data uses 2025 in field names for now
-          const monthKey = month.toLowerCase() + '2025';
+        {monthsToShow.map((monthDisplay) => {
+          // Get the full month column info (with year)
+          const monthCol = getMonthColumn(monthDisplay);
+          if (!monthCol) return null;
+
+          const monthKey = monthCol.fullKey; // e.g., "nov2024"
           const changeKey = monthKey + '_change';
           const volumeKey = monthKey + '_volume';
 
           return (
-            <React.Fragment key={month}>
+            <React.Fragment key={monthDisplay}>
               <td className="px-4 py-3 text-right font-mono text-sm">
                 {item[monthKey] !== null && item[monthKey] !== undefined
                   ? Number(item[monthKey]).toFixed(2)
@@ -531,18 +601,23 @@ export function MonthOverMonthTable({
     'Feb',
     'Jan',
   ];
+
+  // Use selectedMonths if populated, otherwise fall back to first 4 detected months
+  const effectiveSelectedMonths = selectedMonths.length > 0
+    ? selectedMonths
+    : detectedMonths.slice(0, 4).map(m => m.display);
+
   const monthsToShow =
     additionalColumn === 'All months'
       ? allMonths
-      : selectedMonths.sort(
+      : effectiveSelectedMonths.sort(
           (a, b) => monthOrder.indexOf(a) - monthOrder.indexOf(b)
         );
 
-  // Determine year based on month (assuming Feb 2025 is the most recent)
-  const getYearForMonth = (month: string) => {
-    const currentMonths = ['Feb', 'Jan'];
-    return currentMonths.includes(month) ? '2025' : '2024';
-  };
+  console.log('📋 Months to show in table:', monthsToShow);
+  console.log('🔢 Selected months state:', selectedMonths);
+  console.log('🔢 Effective selected months:', effectiveSelectedMonths);
+  console.log('➕ Additional column:', additionalColumn);
 
   return (
     <div
@@ -609,44 +684,33 @@ export function MonthOverMonthTable({
                   </h3>
                 </div>
 
-                <div className="space-y-3">
-                  <h4 className="text-sm font-medium">Select Months</h4>
-                  <div className="grid grid-cols-3 gap-x-4 gap-y-3">
-                    {[
-                      'Jan',
-                      'Feb',
-                      'Mar',
-                      'Apr',
-                      'May',
-                      'Jun',
-                      'Jul',
-                      'Aug',
-                      'Sep',
-                      'Oct',
-                      'Nov',
-                      'Dec',
-                    ].map((month) => (
-                      <div key={month} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={month}
-                          checked={selectedMonths.includes(month)}
-                          onCheckedChange={() => handleMonthToggle(month)}
-                          disabled={
-                            additionalColumn === 'All months' ||
-                            ['Q1', 'Q2', 'Q3', 'Q4'].includes(additionalColumn)
-                          }
-                          className="h-4 w-4"
-                        />
-                        <Label
-                          htmlFor={month}
-                          className="text-sm font-normal cursor-pointer"
-                        >
-                          {month}
-                        </Label>
-                      </div>
-                    ))}
+                {allMonths.length > 0 && (
+                  <div className="space-y-3">
+                    <h4 className="text-sm font-medium">Select Months</h4>
+                    <div className="grid grid-cols-3 gap-x-4 gap-y-3">
+                      {allMonths.map((month) => (
+                        <div key={month} className="flex items-center space-x-2">
+                          <Checkbox
+                            id={month}
+                            checked={selectedMonths.includes(month)}
+                            onCheckedChange={() => handleMonthToggle(month)}
+                            disabled={
+                              additionalColumn === 'All months' ||
+                              ['Q1', 'Q2', 'Q3', 'Q4'].includes(additionalColumn)
+                            }
+                            className="h-4 w-4"
+                          />
+                          <Label
+                            htmlFor={month}
+                            className="text-sm font-normal cursor-pointer"
+                          >
+                            {month}
+                          </Label>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
 
                 <div className="border-t pt-4 space-y-3">
                   <h4 className="text-sm font-medium">Additional columns</h4>
@@ -777,19 +841,23 @@ export function MonthOverMonthTable({
                   )}
                 </div>
               </th>
-              {monthsToShow.map((month) => {
-                const monthKey = month.toLowerCase() + '2025';
+              {monthsToShow.map((monthDisplay) => {
+                // Get the full month column info (with year)
+                const monthCol = getMonthColumn(monthDisplay);
+                if (!monthCol) return null;
+
+                const monthKey = monthCol.fullKey; // e.g., "nov2024"
                 const changeKey = monthKey + '_change';
                 const volumeKey = monthKey + '_volume';
 
                 return (
-                  <React.Fragment key={month}>
+                  <React.Fragment key={monthDisplay}>
                     <th
                       className="px-4 py-3 text-right text-sm font-medium text-foreground cursor-pointer hover:bg-muted/50"
                       onClick={() => handleSort(monthKey)}
                     >
                       <div className="flex items-center justify-end gap-1 whitespace-nowrap">
-                        {month} {getYearForMonth(month)}
+                        {monthCol.display} {monthCol.year}
                         {sortColumn === monthKey ? (
                           sortDirection === 'asc' ? (
                             <ChevronUp className="h-4 w-4" />
